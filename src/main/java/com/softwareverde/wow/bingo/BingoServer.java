@@ -17,11 +17,11 @@ public class BingoServer {
 
     protected final BingoState _bingoState;
 
-    public BingoServer(final List<String> bingoSquares, final Long seed) {
+    public BingoServer(final List<String> bingoSquares, final Long seed, final String adminPassword) {
         _apiServer.setPort(8080);
 
         _bingoState = new BingoState(bingoSquares, seed);
-        _webSocketApi = new WebSocketApi(_bingoState);
+        _webSocketApi = new WebSocketApi(_bingoState, adminPassword);
 
         { // Api Endpoints
             final String apiRootPath = "/api";

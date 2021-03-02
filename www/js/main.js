@@ -70,6 +70,8 @@ window.app.createWebSocket = function() {
 };
 
 window.app.send = function(message, callback) {
+    if (! window.app.webSocket) { return; }
+
     const requestId = (window.app.requestId += 1);
     message.requestId = requestId;
     window.app.requests[requestId] = callback;

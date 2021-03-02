@@ -37,6 +37,7 @@ window.app.admin.bind = function() {
     const firstRender = function() {
         window.app.getGlobalGameState(function(globalGameState) {
             window.app.renderGlobalGameState(globalGameState);
+            window.app.getBingoWinner();
         });
     };
 
@@ -46,7 +47,6 @@ window.app.admin.bind = function() {
             const password = $(this).val();
             setPassword(password);
             firstRender();
-            window.app.getBingoWinner();
         }
     });
 
@@ -55,7 +55,6 @@ window.app.admin.bind = function() {
         const password = passwordUi.val();
         setPassword(password);
         firstRender();
-        window.app.getBingoWinner();
     });
 
     const cancelWinnerButton = $("#ban-winner-button");
@@ -140,6 +139,19 @@ window.app.renderGlobalGameState = function(globalGameState) {
     }
 
     container.toggleClass("hidden", false);
+};
+
+// Override
+window.app.init = function() {
+    window.app.send({
+        "query": "getLabels"
+    }, function(response) {
+        if (response.wasSuccess) {
+            window.app.data.labels = response.labels;
+
+            window.app.bind();
+        }
+    });
 };
 
 window.setInterval(function() {

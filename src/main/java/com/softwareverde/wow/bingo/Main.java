@@ -14,10 +14,11 @@ public class Main {
         Logger.setLog(LineNumberAnnotatedLog.getInstance());
         Logger.setLogLevel(LogLevel.ON);
 
+        final String adminPassword = (parameters.length > 0 ? parameters[0] : "");
         final Long seed;
         {
-            if (parameters.length > 0) {
-                seed = Util.parseLong(parameters[0]);
+            if (parameters.length > 1) {
+                seed = Util.parseLong(parameters[1]);
             }
             else {
                 seed = Math.abs((long) (Integer.MAX_VALUE * Math.random()));
@@ -34,10 +35,14 @@ public class Main {
             }
             bingoSquares = listBuilder.build();
         }
+
+        if (! Util.isBlank(adminPassword)) {
+            Logger.info("[Password protected]");
+        }
         Logger.info("[Seed " + seed + "]");
         Logger.info("[Loaded " + bingoSquares.getCount() + " squares]");
 
-        final BingoServer bingoServer = new BingoServer(bingoSquares, seed);
+        final BingoServer bingoServer = new BingoServer(bingoSquares, seed, adminPassword);
         bingoServer.start();
 
         Logger.info("[Listening on port 8080]");

@@ -35,9 +35,11 @@ public class WebSocketApi implements WebSocketServlet {
     protected volatile Boolean _isShuttingDown = false;
 
     protected final BingoState _bingoState;
+    protected final String _adminPassword;
 
-    public WebSocketApi(final BingoState bingoState) {
+    public WebSocketApi(final BingoState bingoState, final String adminPassword) {
         _bingoState = bingoState;
+        _adminPassword = adminPassword;
     }
 
     protected final CachedThreadPool _threadPool = new CachedThreadPool(256, 1000L);
@@ -141,6 +143,13 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected synchronized void _handleGetGlobalGameState(final Json request, final WebSocket webSocket) {
+        final Json parameters = request.get("parameters");
+        final String password = parameters.getString("password");
+        if (! Util.areEqual(_adminPassword, password)) {
+            _sendUnauthorizedRequest(request, webSocket);
+            return;
+        }
+
         final Integer requestId = request.getInteger("requestId");
 
         final Json globalGameStateJson;
@@ -163,6 +172,11 @@ public class WebSocketApi implements WebSocketServlet {
     protected synchronized void _handleUpdateGlobalGameState(final Json request, final WebSocket webSocket) {
         final Integer requestId = request.getInteger("requestId");
         final Json parameters = request.get("parameters");
+        final String password = parameters.getString("password");
+        if (! Util.areEqual(_adminPassword, password)) {
+            _sendUnauthorizedRequest(request, webSocket);
+            return;
+        }
 
         final MutableList<String> winningBingoUsers = new MutableList<>();
         WRITE_LOCK.lock();
@@ -209,8 +223,15 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected synchronized void _handleBanWinner(final Json request, final WebSocket webSocket) {
+        // final Integer requestId = request.getInteger("requestId");
         final Json parameters = request.get("parameters");
         final String bingoWinner = parameters.getString("username");
+        final String password = parameters.getString("password");
+        if (! Util.areEqual(_adminPassword, password)) {
+            _sendUnauthorizedRequest(request, webSocket);
+            return;
+        }
+
         if (! Util.isBlank(bingoWinner)) {
             BANNED_WINNERS.add(bingoWinner);
         }
@@ -240,6 +261,17 @@ public class WebSocketApi implements WebSocketServlet {
         }
 
         _broadcastBingoWinner();
+    }
+
+    protected void _sendUnauthorizedRequest(final Json request, final WebSocket webSocket) {
+        final Integer requestId = request.getInteger("requestId");
+
+        final Json responseJson = new Json();
+        responseJson.put("requestId", requestId);
+        responseJson.put("wasSuccess", 0);
+        responseJson.put("errorMessage", "Unauthorized.");
+
+        webSocket.sendMessage(responseJson.toString());
     }
 
     protected void _handleGetBingoWinner(final Json request, final WebSocket webSocket) {
