@@ -1,6 +1,7 @@
 package com.softwareverde.wow.bingo;
 
 import com.softwareverde.constable.list.List;
+import com.softwareverde.constable.list.mutable.MutableList;
 
 import java.util.HashMap;
 
@@ -8,7 +9,7 @@ public class BingoState {
     protected final Long _seed;
     protected final List<String> _squareLabels;
     protected final HashMap<Integer, Boolean> _markedLabelIndexes = new HashMap<>();
-    protected final HashMap<String, BingoGame> _games = new HashMap<>();
+    protected final HashMap<String, BingoGame> _bingoGames = new HashMap<>();
 
     public BingoState(final List<String> squareLabels, final Long seed) {
         _seed = seed;
@@ -31,22 +32,53 @@ public class BingoState {
             bingoGame.updateBoard(markedLabelIndex, isMarked);
         }
 
-        _games.put(name, bingoGame);
+        _bingoGames.put(name, bingoGame);
     }
 
     public BingoGame getBingoGame(final String name) {
-        return _games.get(name);
+        return _bingoGames.get(name);
     }
 
     public Boolean hasBingoGame(final String name) {
-        return _games.containsKey(name);
+        return _bingoGames.containsKey(name);
     }
 
-    public void markLabel(final Integer labelIndex, final Boolean isMarked) {
+    public List<String> markLabel(final Integer labelIndex, final Boolean isMarked) {
+        final MutableList<String> winningBingoGames = new MutableList<>();
+
         _markedLabelIndexes.put(labelIndex, isMarked);
-        for (final BingoGame bingoGame : _games.values()) {
+        for (final BingoGame bingoGame : _bingoGames.values()) {
             bingoGame.updateBoard(labelIndex, isMarked);
+            if (bingoGame.isABingo()) {
+                for (final String username : _bingoGames.keySet()) {
+                    final BingoGame matchingBingoGame = _bingoGames.get(username);
+                    if (bingoGame == matchingBingoGame) { // NOTE: Intentional instance-equals.
+                        winningBingoGames.add(username);
+                        break;
+                    }
+                }
+            }
         }
+
+        return winningBingoGames;
+    }
+
+    public List<String> getWinningBingos() {
+        final MutableList<String> winningBingoGames = new MutableList<>();
+
+        for (final BingoGame bingoGame : _bingoGames.values()) {
+            if (bingoGame.isABingo()) {
+                for (final String username : _bingoGames.keySet()) {
+                    final BingoGame matchingBingoGame = _bingoGames.get(username);
+                    if (bingoGame == matchingBingoGame) { // NOTE: Intentional instance-equals.
+                        winningBingoGames.add(username);
+                        break;
+                    }
+                }
+            }
+        }
+
+        return winningBingoGames;
     }
 
     public Boolean isLabelMarked(final Integer labelIndex) {

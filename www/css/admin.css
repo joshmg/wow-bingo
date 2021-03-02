@@ -1,0 +1,13 @@
+#main > div:hover {
+    background-color: #3564BF;
+    cursor: pointer;
+}
+#main > div.marked:hover {
+    background-color: #3756E4;
+}
+#winner-container input {
+    display: block;
+    margin: auto;
+    margin-top: 1em;
+    margin-bottom: -1em;
+}

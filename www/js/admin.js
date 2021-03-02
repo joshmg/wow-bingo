@@ -1,23 +1,30 @@
 window.app.admin = {};
+window.app.admin.super = {};
 
-window.app.superBind = window.app.bind;
+window.app.admin.super.bind = window.app.bind;
 window.app.bind = function() {
-    window.app.superBind();
+    window.app.admin.super.bind();
     window.app.admin.bind();
 };
 
-window.app.webSocket.superOnmessage = window.app.webSocket.onmessage;
-window.app.webSocket.onmessage = function(event) {
-    const superReturnValue = window.app.webSocket.superOnmessage(event);
+window.app.admin.super.createWebSocket = window.app.createWebSocket;
+window.app.createWebSocket = function() {
+    window.app.admin.super.createWebSocket();
 
-    const response = JSON.parse(event.data);
-    if (response.globalGameState) {
-        window.app.admin.globalGameState = response.globalGameState;
-        window.app.renderGlobalGameState(response.globalGameState);
-    }
+    const superOnMessage = window.app.webSocket.onmessage;
+    window.app.webSocket.onmessage = function(event) {
+        const superReturnValue = superOnMessage(event);
 
-    return superReturnValue;
+        const response = JSON.parse(event.data);
+        if (response.globalGameState) {
+            window.app.admin.globalGameState = response.globalGameState;
+            window.app.renderGlobalGameState(response.globalGameState);
+        }
+
+        return superReturnValue;
+    };
 };
+
 
 window.app.admin.bind = function() {
     const setPassword = function(password) {
@@ -39,6 +46,7 @@ window.app.admin.bind = function() {
             const password = $(this).val();
             setPassword(password);
             firstRender();
+            window.app.getBingoWinner();
         }
     });
 
@@ -47,6 +55,12 @@ window.app.admin.bind = function() {
         const password = passwordUi.val();
         setPassword(password);
         firstRender();
+        window.app.getBingoWinner();
+    });
+
+    const cancelWinnerButton = $("#ban-winner-button");
+    cancelWinnerButton.bind("click", function() {
+        window.app.banWinner(window.app.data.bingoWinner);
     });
 
     window.setTimeout(function() {
@@ -86,6 +100,22 @@ window.app.updateGlobalGameState = function(index, isMarked, callback) {
     });
 };
 
+window.app.banWinner = function(username, callback) {
+    window.app.send({
+        "query": "banWinner",
+        "parameters": {
+            "password": window.app.admin.password,
+            "username": username
+        }
+    }, function(response) {
+        if (response.wasSuccess) {
+            if (typeof callback == "function") {
+                callback(response.globalGameState);
+            }
+        }
+    });
+};
+
 window.app.renderGlobalGameState = function(globalGameState) {
     const container = $("#main");
     container.empty();
@@ -109,9 +139,9 @@ window.app.renderGlobalGameState = function(globalGameState) {
         container.append(div);
     }
 
-    container.toggle(true);
+    container.toggleClass("hidden", false);
 };
 
 window.setInterval(function() {
     window.app.getGlobalGameState();
-}, 5000);
+}, 30000);

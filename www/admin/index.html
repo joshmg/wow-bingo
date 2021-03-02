@@ -15,9 +15,17 @@
             <input type="button" id="password-button" value="Ok" />
         </div>
 
-        <div id="main"></div>
+        <div id="winner-container" class="hidden">
+            <div>
+                <span class="username"></span>
+                <input type="button" id="ban-winner-button" value="Nope" />
+            </div>
+        </div>
+
+        <div id="main" class="hidden"></div>
 
         <script src="/js/main.js"></script>
         <script src="/js/admin.js"></script>
+        <script>window.app.createWebSocket();</script>
     </body>
 </html>

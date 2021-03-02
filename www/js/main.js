@@ -7,18 +7,73 @@ window.app.data.labels = [];
 window.app.gameState = null;
 
 window.app.webSocketEndpoint = "/api/v1/websocket";
-if (window.location.protocol == "http:") {
-    window.app.webSocket = new WebSocket("ws://" + window.location.host + window.app.webSocketEndpoint);
-}
-else {
-    window.app.webSocket = new WebSocket("wss://" + window.location.host + window.app.webSocketEndpoint);
-}
+
+window.app.createWebSocket = function() {
+    if (window.app.webSocket) {
+        window.app.webSocket.onopen = null;
+        window.app.webSocket.onmessage = null;
+        window.app.webSocket.onclose = null;
+
+        window.app.webSocket.close();
+        window.app.webSocket = null;
+    }
+
+    if (window.location.protocol == "http:") {
+        window.app.webSocket = new WebSocket("ws://" + window.location.host + window.app.webSocketEndpoint);
+    }
+    else {
+        window.app.webSocket = new WebSocket("wss://" + window.location.host + window.app.webSocketEndpoint);
+    }
+
+    window.app.webSocket.onopen = function() {
+        window.app.init();
+    };
+
+    window.app.webSocket.onmessage = function(event) {
+        const response = JSON.parse(event.data);
+        const requestId = response.requestId;
+
+        if (requestId) {
+            const callback = window.app.requests[requestId];
+            window.app.requests[requestId] = null;
+            if (typeof callback == "function") {
+                window.setTimeout(callback, 0, response);
+            }
+        }
+        else {
+            if (typeof response.gameState != "undefined") {
+                window.app.data.gameState = response.gameState;
+                window.app.renderGameState(response.gameState);
+            }
+            else if (typeof response.bingoWinner != "undefined") {
+                window.app.data.bingoWinner = response.bingoWinner;
+                window.app.renderBingoWinner(response.bingoWinner);
+            }
+        }
+
+        return false;
+    };
+
+    window.app.webSocket.sendJson = function(message) {
+        window.app.webSocket.send(JSON.stringify(message));
+    };
+
+    window.app.webSocket.onclose = function() {
+        console.log("WebSocket closed.");
+        window.app.requests = {};
+        window.app.webSocket = null;
+
+        window.setTimeout(function() {
+            window.app.createWebSocket();
+        }, 1000);
+    };
+};
 
 window.app.send = function(message, callback) {
     const requestId = (window.app.requestId += 1);
     message.requestId = requestId;
     window.app.requests[requestId] = callback;
-    window.app.webSocket.send(JSON.stringify(message));
+    window.app.webSocket.sendJson(message);
 };
 
 window.app.init = function() {
@@ -29,6 +84,7 @@ window.app.init = function() {
             window.app.data.labels = response.labels;
 
             window.app.bind();
+            window.app.getBingoWinner();
         }
     });
 };
@@ -48,6 +104,14 @@ window.app.bind = function() {
     const setQueryStringUsername = function(username) {
         window.history.replaceState({"name": username}, username, "?name=" + username);
     };
+
+    const winnerContainer = $("#winner-container");
+    winnerContainer.bind("click", function() {
+        winnerContainer.fadeOut(500, function() {
+            winnerContainer.removeAttr("style"); // Allow for winner re-broadcasts.
+            winnerContainer.toggleClass("hidden", true);
+        });
+    });
 
     const usernameUi = $("#username");
     usernameUi.bind("keyup", function(event) {
@@ -81,7 +145,7 @@ window.app.render = function() {
     loginContainer.toggle(false);
 
     const mainContainer = $("#main");
-    mainContainer.toggle(true);
+    mainContainer.toggleClass("hidden", false);
 };
 
 window.app.renderGameState = function(gameState) {
@@ -107,34 +171,17 @@ window.app.renderGameState = function(gameState) {
     container.toggle(true);
 };
 
-window.app.webSocket.onopen = function() {
-    window.app.init();
-};
-
-window.app.webSocket.onmessage = function(event) {
-    const response = JSON.parse(event.data);
-    const requestId = response.requestId;
-
-    if (requestId) {
-        const callback = window.app.requests[requestId];
-        window.app.requests[requestId] = null;
-        if (typeof callback == "function") {
-            window.setTimeout(callback, 0, response);
-        }
-    }
-    else {
-        if (response.gameState) {
-            window.app.data.gameState = response.gameState;
-            window.app.renderGameState(response.gameState);
-        }
+window.app.renderBingoWinner = function(username) {
+    const winnerContainer = $("#winner-container");
+    if (! username) {
+        winnerContainer.removeAttr("style");
+        winnerContainer.toggleClass("hidden", true);
+        return;
     }
 
-    return false;
-};
-
-window.app.webSocket.onclose = function() {
-    console.log("WebSocket closed.");
-    window.app.requests = {};
+    username = (username.length > 0 ? (username.charAt(0).toUpperCase() + username.substring(1)) : username);
+    $(".username", winnerContainer).text(username + " is the winner!");
+    winnerContainer.toggleClass("hidden", false);
 };
 
 window.app.setUser = function(user, callback) {
@@ -152,3 +199,15 @@ window.app.setUser = function(user, callback) {
     });
 };
 
+window.app.getBingoWinner = function(callback) {
+    window.app.send({
+        "query": "getBingoWinner",
+        "parameters": {}
+    }, function(response) {
+        if (response.wasSuccess) {
+            if (typeof callback == "function") {
+                callback(response.bingoWinner);
+            }
+        }
+    });
+};

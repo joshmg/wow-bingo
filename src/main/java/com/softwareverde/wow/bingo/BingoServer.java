@@ -6,7 +6,6 @@ import com.softwareverde.http.server.HttpServer;
 import com.softwareverde.http.server.endpoint.Endpoint;
 import com.softwareverde.http.server.endpoint.WebSocketEndpoint;
 import com.softwareverde.http.server.servlet.DirectoryServlet;
-import com.softwareverde.http.server.servlet.Servlet;
 
 import java.io.File;
 import java.util.concurrent.TimeUnit;

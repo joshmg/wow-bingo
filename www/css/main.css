@@ -41,6 +41,9 @@ body {
     padding: 5px;
     background-color: #00275A;
 }
+#main.hidden {
+    display: none;
+}
 
 #main > div {
     display: inline-block;
@@ -65,4 +68,34 @@ body {
 
 #main > div.marked {
     background-color: #506EF7;
+}
+
+#winner-container {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.2);
+    text-align: center;
+}
+#winner-container.hidden {
+    display: none;
+}
+
+#winner-container > div {
+    background-color: #E9EBFF;
+    color: #404040;
+    font-size: 2em;
+    font-weight: bold;
+    display: block;
+    margin: auto;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: #000000 5px 5px 10px;
+    padding: 2em;
+    border-radius: 0.25em;
 }
