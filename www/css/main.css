@@ -68,6 +68,7 @@ body {
 
 #main > div.marked {
     background-color: #506EF7;
+    border: solid 1px #ABCDEF;
 }
 
 #winner-container {

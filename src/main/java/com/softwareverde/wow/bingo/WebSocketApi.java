@@ -56,6 +56,7 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected void _handleGetLabels(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetLabels " + webSocket.getId() + " " + request);
         final Integer requestId = request.getInteger("requestId");
 
         final Json squaresJson = new Json(true);
@@ -68,10 +69,11 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("wasSuccess", 1);
         responseJson.put("labels", squaresJson);
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected void _handleGetGameState(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetGameState " + webSocket.getId() + " " + request);
         final Long webSocketId = webSocket.getId();
 
         final Integer requestId = request.getInteger("requestId");
@@ -83,6 +85,7 @@ public class WebSocketApi implements WebSocketServlet {
         WRITE_LOCK.lock();
         try {
             if (! _bingoState.hasBingoGame(username)) {
+                Logger.info("Creating BingoGame for: " + username);
                 _bingoState.newBingoGame(username);
             }
             bingoGame = _bingoState.getBingoGame(username);
@@ -97,10 +100,11 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("wasSuccess", 1);
         responseJson.put("gameState", bingoGame);
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected void _broadcastGameState() {
+        Logger.trace("_broadcastGameState");
         READ_LOCK.lock();
         try {
             for (final WebSocket webSocket : WEB_SOCKETS.values()) {
@@ -115,7 +119,7 @@ public class WebSocketApi implements WebSocketServlet {
                 responseJson.put("wasSuccess", 1);
                 responseJson.put("gameState", bingoGame);
 
-                webSocket.sendMessage(responseJson.toString());
+                _webSocketSendMessage(webSocket, responseJson.toString());
             }
         }
         finally {
@@ -124,6 +128,7 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected void _broadcastBingoWinner() {
+        Logger.trace("_broadcastBingoWinner");
         final String bingoWinner = BINGO_WINNER;
 
         READ_LOCK.lock();
@@ -134,7 +139,7 @@ public class WebSocketApi implements WebSocketServlet {
                 responseJson.put("wasSuccess", 1);
                 responseJson.put("bingoWinner", bingoWinner);
 
-                webSocket.sendMessage(responseJson.toString());
+                _webSocketSendMessage(webSocket, responseJson.toString());
             }
         }
         finally {
@@ -143,6 +148,7 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected synchronized void _handleGetGlobalGameState(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetGlobalGameState " + webSocket.getId() + " " + request);
         final Json parameters = request.get("parameters");
         final String password = parameters.getString("password");
         if (! Util.areEqual(_adminPassword, password)) {
@@ -166,10 +172,11 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("wasSuccess", 1);
         responseJson.put("globalGameState", globalGameStateJson);
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected synchronized void _handleUpdateGlobalGameState(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleUpdateGlobalGameState " + webSocket.getId() + " " + request);
         final Integer requestId = request.getInteger("requestId");
         final Json parameters = request.get("parameters");
         final String password = parameters.getString("password");
@@ -186,6 +193,7 @@ public class WebSocketApi implements WebSocketServlet {
             final List<String> winners = _bingoState.markLabel(index, isMarked);
             for (final String winner : winners) {
                 if (! BANNED_WINNERS.contains(winner)) {
+                    Logger.debug("Bingo detected for: " + winner);
                     winningBingoUsers.add(winner);
                 }
             }
@@ -208,13 +216,15 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("wasSuccess", 1);
         responseJson.put("globalGameState", globalGameStateJson);
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
 
         _broadcastGameState();
 
         if ( (BINGO_WINNER == null) && (! winningBingoUsers.isEmpty()) ) {
             final int index = (((int) (Math.random() * Integer.MAX_VALUE)) % winningBingoUsers.getCount());
             BINGO_WINNER = winningBingoUsers.get(index);
+            Logger.info("Bingo selected: " + BINGO_WINNER);
+
             _broadcastBingoWinner();
         }
         else if (winningBingoUsers.isEmpty()) {
@@ -223,6 +233,8 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected synchronized void _handleBanWinner(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleBanWinner " + webSocket.getId() + " " + request);
+
         // final Integer requestId = request.getInteger("requestId");
         final Json parameters = request.get("parameters");
         final String bingoWinner = parameters.getString("username");
@@ -244,6 +256,7 @@ public class WebSocketApi implements WebSocketServlet {
             final List<String> winners = _bingoState.getWinningBingos();
             for (final String winner : winners) {
                 if (! BANNED_WINNERS.contains(winner)) {
+                    Logger.debug("Bingo detected for: " + winner);
                     winningBingoUsers.add(winner);
                 }
             }
@@ -255,6 +268,7 @@ public class WebSocketApi implements WebSocketServlet {
         if ( (BINGO_WINNER == null) && (! winningBingoUsers.isEmpty()) ) {
             final int index = (((int) (Math.random() * Integer.MAX_VALUE)) % winningBingoUsers.getCount());
             BINGO_WINNER = winningBingoUsers.get(index);
+            Logger.info("Bingo selected: " + BINGO_WINNER);
         }
         else if (winningBingoUsers.isEmpty()) {
             BINGO_WINNER = null;
@@ -264,6 +278,8 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected void _sendUnauthorizedRequest(final Json request, final WebSocket webSocket) {
+        Logger.trace("_sendUnauthorizedRequest " + webSocket.getId() + " " + request);
+
         final Integer requestId = request.getInteger("requestId");
 
         final Json responseJson = new Json();
@@ -271,16 +287,18 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("wasSuccess", 0);
         responseJson.put("errorMessage", "Unauthorized.");
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected void _handleGetBingoWinner(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetBingoWinner " + webSocket.getId() + " " + request);
+
         final Json responseJson = new Json();
         responseJson.put("requestId", null);
         responseJson.put("wasSuccess", 1);
         responseJson.put("bingoWinner", BINGO_WINNER);
 
-        webSocket.sendMessage(responseJson.toString());
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected void _onMessage(final Json request, final WebSocket webSocket) {
@@ -319,9 +337,14 @@ public class WebSocketApi implements WebSocketServlet {
                 responseJson.put("wasSuccess", 0);
                 responseJson.put("errorMessage", "Unknown query: " + query);
 
-                webSocket.sendMessage(responseJson.toString());
+                _webSocketSendMessage(webSocket, responseJson.toString());
             }
         }
+    }
+
+    protected void _webSocketSendMessage(final WebSocket webSocket, final String message) {
+        Logger.trace("SENDING: " + webSocket.getId() + " " + message);
+        webSocket.sendMessage(message);
     }
 
     @Override

@@ -2,6 +2,8 @@ group 'com.softwareverde'
 version '2.0.1'
 
 apply plugin: 'java'
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 repositories {
     mavenCentral()
@@ -14,7 +16,7 @@ dependencies {
     implementation group: 'com.github.softwareverde',   name: 'json',               version: 'v2.0.0'
     implementation group: 'com.github.softwareverde',   name: 'java-logging',       version: 'v2.2.0'
     implementation group: 'com.github.softwareverde',   name: 'java-util',          version: 'v2.7.1'
-    implementation (group: 'com.github.softwareverde',  name: 'java-http-client',   version: 'v2.1.1', force: true)
+    implementation (group: 'com.github.softwareverde',  name: 'java-http-client',   version: 'v2.1.0', force: true)
     implementation group: 'com.github.softwareverde',   name: 'java-concurrent',    version: 'v1.0.0'
     implementation group: 'com.github.softwareverde',   name: 'http-servlet',       version: 'v3.2.0'
 }
