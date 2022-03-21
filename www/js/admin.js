@@ -20,6 +20,20 @@ window.app.createWebSocket = function() {
             window.app.admin.globalGameState = response.globalGameState;
             window.app.renderGlobalGameState(response.globalGameState);
         }
+        if (response.players) {
+            window.app.data.players = response.players;
+
+            const gameState = window.app.admin.globalGameState;
+            if (gameState) {
+                window.app.renderGlobalGameState(gameState);
+            }
+        }
+        if (response.bingoWinners) {
+            const gameState = window.app.admin.globalGameState;
+            if (gameState) {
+                window.app.renderGlobalGameState(gameState);
+            }
+        }
 
         return superReturnValue;
     };
@@ -36,8 +50,13 @@ window.app.admin.bind = function() {
 
     const firstRender = function() {
         window.app.getGlobalGameState(function(globalGameState) {
+            if (! globalGameState) {
+                console.log("Unable to load game state.");
+                return;
+            }
+
             window.app.renderGlobalGameState(globalGameState);
-            window.app.getBingoWinner();
+            window.app.getBingoWinners();
         });
     };
 
@@ -57,11 +76,6 @@ window.app.admin.bind = function() {
         firstRender();
     });
 
-    const cancelWinnerButton = $("#ban-winner-button");
-    cancelWinnerButton.bind("click", function() {
-        window.app.banWinner(window.app.data.bingoWinner);
-    });
-
     window.setTimeout(function() {
         passwordUi.focus();
     }, 0);
@@ -74,10 +88,8 @@ window.app.getGlobalGameState = function(callback) {
             "password": window.app.admin.password
         }
     }, function(response) {
-        if (response.wasSuccess) {
-            if (typeof callback == "function") {
-                callback(response.globalGameState);
-            }
+        if (typeof callback == "function") {
+            callback(response.wasSuccess ? response.globalGameState : null);
         }
     });
 };
@@ -91,10 +103,8 @@ window.app.updateGlobalGameState = function(index, isMarked, callback) {
             "password": window.app.admin.password
         }
     }, function(response) {
-        if (response.wasSuccess) {
-            if (typeof callback == "function") {
-                callback(response.globalGameState);
-            }
+        if (typeof callback == "function") {
+            callback(response.wasSuccess ? response.globalGameState : null);
         }
     });
 };
@@ -107,50 +117,138 @@ window.app.banWinner = function(username, callback) {
             "username": username
         }
     }, function(response) {
-        if (response.wasSuccess) {
-            if (typeof callback == "function") {
-                callback(response.globalGameState);
-            }
+        if (typeof callback == "function") {
+            callback(response.wasSuccess ? response.globalGameState : null);
+        }
+    });
+};
+
+window.app.setHasPaid = function(username, hasPaid, callback) {
+    window.app.send({
+        "query": "setHasPaid",
+        "parameters": {
+            "password": window.app.admin.password,
+            "username": username,
+            "hasPaid": hasPaid,
+        }
+    }, function(response) {
+        if (typeof callback == "function") {
+            callback(response.wasSuccess ? response.players : null);
         }
     });
 };
 
 window.app.renderGlobalGameState = function(globalGameState) {
-    const container = $("#main");
-    container.empty();
+    const labels = window.app.data.labels || [];
+    const players = window.app.data.players || [];
+    const bingoWinners = window.app.data.bingoWinners || [];
 
-    const labels = window.app.data.labels;
+    const main = $("#main");
+    const bingoContainer = $("#bingo");
+    const playersContainer = $("#players");
+    const winnersContainer = $("#winners");
 
-    for (let index = 0; index < labels.length; ++index) {
-        const label = labels[index];
+    // Render bingo squares...
+    (function() {
+        bingoContainer.empty();
+        for (let index = 0; index < labels.length; ++index) {
+            const label = labels[index];
 
-        const div = $("<div></div>");
-        div.toggleClass("marked", globalGameState[index]);
-        const span = $("<span></span>");
-        span.text(label);
-        div.append(span);
+            const div = $("<div></div>");
+            div.toggleClass("marked", globalGameState[index]);
 
-        div.bind("click", function() {
-            const isMarked = globalGameState[index];
-            window.app.updateGlobalGameState(index, isMarked ? 0 : 1);
-        });
+            const span = $("<span></span>");
+            span.toggleClass("noselect", true);
 
-        container.append(div);
-    }
+            span.text(label);
+            div.append(span);
 
-    container.toggleClass("hidden", false);
+            div.bind("click", function() {
+                const isMarked = globalGameState[index];
+                window.app.updateGlobalGameState(index, isMarked ? 0 : 1);
+            });
+
+            bingoContainer.append(div);
+        }
+    })();
+
+    // Render players...
+    (function() {
+        const sanitizeName = function(name) {
+            const div = $("<div></div>");
+            div.text(name);
+            return div.html();
+        };
+
+        const uncheckedBox = "&#x2610;";
+        const checkedBox = "&#x2611;";
+
+        playersContainer.empty();
+        for (let index = 0; index < players.length; ++index) {
+            const player = players[index];
+
+            const div = $("<div></div>");
+
+            const span = $("<span></span>");
+            span.toggleClass("noselect", true);
+
+            span.html((player.hasPaid ? checkedBox : uncheckedBox) + " " + sanitizeName(player.name));
+            div.append(span);
+
+            div.bind("click", function() {
+                window.app.setHasPaid(player.name, (player.hasPaid ? false : true), function(players) {
+                    if (! players) { return; }
+
+                    window.app.data.players = players;
+                    window.app.renderGlobalGameState(window.app.admin.globalGameState);
+                });
+            });
+
+            playersContainer.append(div);
+        }
+    })();
+
+
+    // Render winners...
+    (function() {
+        winnersContainer.empty();
+        for (let index = 0; index < bingoWinners.length; ++index) {
+            const player = bingoWinners[index];
+
+            const div = $("<div></div>");
+
+            const span = $("<span></span>");
+            span.toggleClass("noselect", true);
+
+            span.text(player.name + ": " + (player.amount / 100) + " G");
+            div.append(span);
+
+            winnersContainer.append(div);
+        }
+    })();
+
+    main.toggleClass("hidden", false);
 };
 
 // Override
 window.app.init = function() {
-    window.app.send({
-        "query": "getLabels"
-    }, function(response) {
-        if (response.wasSuccess) {
-            window.app.data.labels = response.labels;
-
-            window.app.bind();
+    window.app.send({"query": "getLabels"}, function(response) {
+        if (! response.wasSuccess) {
+            console.log(response);
+            return;
         }
+
+        window.app.data.labels = response.labels;
+
+        window.app.send({"query": "getPlayers"}, function(response) {
+            if (! response.wasSuccess) {
+                console.log(response);
+                return;
+            }
+
+            window.app.data.players = response.players;
+            window.app.bind();
+        });
     });
 };
 

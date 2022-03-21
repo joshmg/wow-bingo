@@ -14,6 +14,70 @@ public class BingoGame implements Jsonable {
     protected final BingoBoard<Integer> _boardLayout;
     protected final BingoBoard<Boolean> _boardValues;
 
+    protected int _getBingoCount() {
+        int bingoCount = 0;
+
+        { // Check for horizontal bingo...
+            for (int y = 0; y < BOARD_WIDTH; ++y) {
+                int setCount = 0;
+                for (int x = 0; x < BOARD_WIDTH; ++x) {
+                    final Boolean isSet = _boardValues.getValue(x, y);
+                    if (! isSet) { break; }
+
+                    setCount += 1;
+                }
+                if (setCount >= BOARD_WIDTH) {
+                    bingoCount += 1;
+                }
+            }
+        }
+
+        { // Check for vertical bingo...
+            for (int x = 0; x < BOARD_WIDTH; ++x) {
+                int setCount = 0;
+                for (int y = 0; y < BOARD_WIDTH; ++y) {
+                    final Boolean isSet = _boardValues.getValue(x, y);
+                    if (! isSet) { break; }
+
+                    setCount += 1;
+                }
+                if (setCount >= BOARD_WIDTH) {
+                    bingoCount += 1;
+                }
+            }
+        }
+
+        { // Check for top-left diagonal bingo...
+            int setCount = 0;
+            for (int i = 0; i < BOARD_WIDTH; ++i) {
+                final Boolean isSet = _boardValues.getValue(i, i);
+                if (! isSet) { break; }
+
+                setCount += 1;
+            }
+            if (setCount >= BOARD_WIDTH) {
+                bingoCount += 1;
+            }
+        }
+
+        { // Check for top-right diagonal bingo...
+            int setCount = 0;
+            for (int i = BOARD_WIDTH; i > 0; --i) {
+                final int x = (i - 1);              // ..., 3, 2, 1, 0
+                final int y = (BOARD_WIDTH - i);    // 0, 1, 2, 3, ...
+                final Boolean isSet = _boardValues.getValue(x, y);
+                if (! isSet) { break; }
+
+                setCount += 1;
+            }
+            if (setCount >= BOARD_WIDTH) {
+                bingoCount += 1;
+            }
+        }
+
+        return bingoCount;
+    }
+
     public BingoGame(final Integer uniqueSquareCount, final Long seed) {
         _seed = seed;
 
@@ -49,57 +113,11 @@ public class BingoGame implements Jsonable {
     }
 
     public Boolean isABingo() {
-        { // Check for horizontal bingo...
-            for (int y = 0; y < BOARD_WIDTH; ++y) {
-                int setCount = 0;
-                for (int x = 0; x < BOARD_WIDTH; ++x) {
-                    final Boolean isSet = _boardValues.getValue(x, y);
-                    if (! isSet) { break; }
+        return (_getBingoCount() > 0);
+    }
 
-                    setCount += 1;
-                }
-                if (setCount >= BOARD_WIDTH) { return true; }
-            }
-        }
-
-        { // Check for vertical bingo...
-            for (int x = 0; x < BOARD_WIDTH; ++x) {
-                int setCount = 0;
-                for (int y = 0; y < BOARD_WIDTH; ++y) {
-                    final Boolean isSet = _boardValues.getValue(x, y);
-                    if (! isSet) { break; }
-
-                    setCount += 1;
-                }
-                if (setCount >= BOARD_WIDTH) { return true; }
-            }
-        }
-
-        { // Check for top-left diagonal bingo...
-            int setCount = 0;
-            for (int i = 0; i < BOARD_WIDTH; ++i) {
-                final Boolean isSet = _boardValues.getValue(i, i);
-                if (! isSet) { break; }
-
-                setCount += 1;
-            }
-            if (setCount >= BOARD_WIDTH) { return true; }
-        }
-
-        { // Check for top-right diagonal bingo...
-            int setCount = 0;
-            for (int i = BOARD_WIDTH; i > 0; --i) {
-                final int x = (i - 1);              // ..., 3, 2, 1, 0
-                final int y = (BOARD_WIDTH - i);    // 0, 1, 2, 3, ...
-                final Boolean isSet = _boardValues.getValue(x, y);
-                if (! isSet) { break; }
-
-                setCount += 1;
-            }
-            if (setCount >= BOARD_WIDTH) { return true; }
-        }
-
-        return false;
+    public Integer getBingoCount() {
+        return _getBingoCount();
     }
 
     @Override

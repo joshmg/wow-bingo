@@ -45,9 +45,21 @@ window.app.createWebSocket = function() {
                 window.app.data.gameState = response.gameState;
                 window.app.renderGameState(response.gameState);
             }
-            else if (typeof response.bingoWinner != "undefined") {
-                window.app.data.bingoWinner = response.bingoWinner;
-                window.app.renderBingoWinner(response.bingoWinner);
+            if (typeof response.bingoWinners != "undefined") {
+                const previousWinnerCount = (window.app.data.bingoWinners || []).length;
+                window.app.data.bingoWinners = response.bingoWinners;
+
+                const bingoWinners = window.app.data.bingoWinners.slice(previousWinnerCount);
+                window.app.renderBingoWinners(bingoWinners);
+            }
+            if (typeof response.jackpot != "undefined") {
+                window.app.data.jackpot = window.parseInt(response.jackpot);
+                window.app.renderJackpot(response.jackpot);
+            }
+
+            if (response.ping) {
+                const pong = { "pong": response.ping };
+                window.app.webSocket.sendJson(pong);
             }
         }
 
@@ -86,19 +98,23 @@ window.app.init = function() {
             window.app.data.labels = response.labels;
 
             window.app.bind();
-            window.app.getBingoWinner();
+            window.app.getBingoWinners();
         }
     });
 };
 
 window.app.bind = function() {
     const setUsername = function(username) {
-        window.app.setUser(username, function(gameState) {
+        window.app.setUser(username, function(gameState, jackpot) {
             window.app.render();
 
             if (gameState) {
                 window.app.data.gameState = gameState;
                 window.app.renderGameState(gameState);
+            }
+            if (jackpot) {
+                window.app.data.jackpot = window.parseInt(jackpot);
+                window.app.renderJackpot(jackpot);
             }
         });
     };
@@ -150,8 +166,13 @@ window.app.render = function() {
     mainContainer.toggleClass("hidden", false);
 };
 
+window.app.renderJackpot = function(jackpot) {
+    const container = $("#jackpot");
+    container.text((jackpot / 100) + " G");
+};
+
 window.app.renderGameState = function(gameState) {
-    const container = $("#main");
+    const container = $("#bingo");
     container.empty();
 
     const labels = window.app.data.labels;
@@ -164,7 +185,10 @@ window.app.renderGameState = function(gameState) {
 
         const div = $("<div></div>");
         div.toggleClass("marked", marks.values[i]);
+
         const span = $("<span></span>");
+        span.toggleClass("noselect", true);
+
         span.text(label);
         div.append(span);
         container.append(div);
@@ -173,16 +197,30 @@ window.app.renderGameState = function(gameState) {
     container.toggle(true);
 };
 
-window.app.renderBingoWinner = function(username) {
+window.app.renderBingoWinners = function(players) {
     const winnerContainer = $("#winner-container");
-    if (! username) {
+    if ( (! players) || players.length == 0) {
         winnerContainer.removeAttr("style");
         winnerContainer.toggleClass("hidden", true);
         return;
     }
 
-    username = (username.length > 0 ? (username.charAt(0).toUpperCase() + username.substring(1)) : username);
-    $(".username", winnerContainer).text(username + " is the winner!");
+    let separator = "";
+    let usernamesString = "";
+    for (let i = 0; i < players.length; i += 1) {
+        let player = players[i];
+
+        let username = player.name;
+        username = (username.length > 0 ? (username.charAt(0).toUpperCase() + username.substring(1)) : username);
+
+        usernamesString += separator + username;
+        separator = ", ";
+    }
+
+    const verb = (players.length == 1 ? "is" : "are");
+    const noun = (players.length == 1 ? "winner" : "winners");
+
+    $(".username", winnerContainer).text(usernamesString + " " + verb + " the " + noun + "!");
     winnerContainer.toggleClass("hidden", false);
 };
 
@@ -195,21 +233,19 @@ window.app.setUser = function(user, callback) {
     }, function(response) {
         if (response.wasSuccess) {
             if (typeof callback == "function") {
-                callback(response.gameState);
+                callback(response.gameState, response.jackpot);
             }
         }
     });
 };
 
-window.app.getBingoWinner = function(callback) {
+window.app.getBingoWinners = function(callback) {
     window.app.send({
-        "query": "getBingoWinner",
-        "parameters": {}
+        "query": "getBingoWinners",
+        "parameters": { }
     }, function(response) {
-        if (response.wasSuccess) {
-            if (typeof callback == "function") {
-                callback(response.bingoWinner);
-            }
+        if (typeof callback == "function") {
+            callback(response.wasSuccess ? response.bingoWinners : null);
         }
     });
 };

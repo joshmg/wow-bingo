@@ -45,7 +45,17 @@ body {
     display: none;
 }
 
-#main > div {
+#jackpot {
+    display: block;
+    text-align: center;
+    margin-bottom: 0.5em;
+    font-size: 2em;
+    padding: 0.25em;
+    color: #ABCDEF;
+    font-weight: bold;
+}
+
+#bingo > div {
     display: inline-block;
     background-color: #2F56A2;
     padding: 5px 5px;
@@ -59,14 +69,14 @@ body {
     overflow: hidden;
 }
 
-#main > div > span {
+#bingo > div > span {
     display: inline-block;
     vertical-align: middle;
     line-height: normal;
     margin-top: -0.5em;
 }
 
-#main > div.marked {
+#bingo > div.marked {
     background-color: #506EF7;
     border: solid 1px #ABCDEF;
 }
@@ -99,4 +109,14 @@ body {
     box-shadow: #000000 5px 5px 10px;
     padding: 2em;
     border-radius: 0.25em;
+}
+
+.noselect {
+  -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none; /* Safari */
+     -khtml-user-select: none; /* Konqueror HTML */
+       -moz-user-select: none; /* Old versions of Firefox */
+        -ms-user-select: none; /* Internet Explorer/Edge */
+            user-select: none; /* Non-prefixed version, currently
+                                  supported by Chrome, Edge, Opera and Firefox */
 }

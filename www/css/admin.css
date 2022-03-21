@@ -1,8 +1,8 @@
-#main > div:hover {
+#bingo > div:hover {
     background-color: #3564BF;
     cursor: pointer;
 }
-#main > div.marked:hover {
+#bingo > div.marked:hover {
     background-color: #3756E4;
 }
 #winner-container input {
@@ -10,4 +10,36 @@
     margin: auto;
     margin-top: 1em;
     margin-bottom: -1em;
+}
+
+#main {
+    width: auto;
+    display: flex;
+    flex: 1;
+}
+
+#bingo {
+    width: 800px;
+}
+
+#players {
+    flex-grow: 1;
+    margin-left: 1em;
+}
+
+#players > div {
+    margin-bottom: 0.5em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+
+#winners {
+    flex-grow: 1;
+    margin-left: 1em;
+}
+
+#winners > div {
+    margin-bottom: 0.5em;
+    text-transform: uppercase;
+    cursor: pointer;
 }

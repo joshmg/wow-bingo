@@ -1,9 +1,7 @@
 package com.softwareverde.wow.bingo;
 
-import com.softwareverde.concurrent.ConcurrentHashSet;
 import com.softwareverde.concurrent.threadpool.CachedThreadPool;
 import com.softwareverde.constable.list.List;
-import com.softwareverde.constable.list.mutable.MutableList;
 import com.softwareverde.http.server.servlet.WebSocketServlet;
 import com.softwareverde.http.server.servlet.request.WebSocketRequest;
 import com.softwareverde.http.server.servlet.response.WebSocketResponse;
@@ -13,6 +11,7 @@ import com.softwareverde.logging.Logger;
 import com.softwareverde.util.Util;
 
 import java.util.HashMap;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -26,9 +25,8 @@ public class WebSocketApi implements WebSocketServlet {
     }
 
     protected static final HashMap<Long, WebSocket> WEB_SOCKETS = new HashMap<>();
+    protected static final WeakHashMap<Long, WebSocket> ADMIN_WEB_SOCKETS = new WeakHashMap<>();
     protected static final HashMap<Long, String> USERNAMES = new HashMap<>();
-    protected static final ConcurrentHashSet<String> BANNED_WINNERS = new ConcurrentHashSet<>();
-    protected static volatile String BINGO_WINNER = null;
 
     protected static final AtomicLong _nextSocketId = new AtomicLong(1L);
 
@@ -44,6 +42,43 @@ public class WebSocketApi implements WebSocketServlet {
 
     protected final CachedThreadPool _threadPool = new CachedThreadPool(256, 1000L);
 
+    protected final Thread _pingThread = new Thread(new Runnable() {
+        @Override
+        public void run() {
+            final Thread thread = Thread.currentThread();
+            thread.setName("WebSocket Ping Thread");
+            thread.setUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+                @Override
+                public void uncaughtException(final Thread thread, final Throwable exception) {
+                    Logger.error(exception);
+                }
+            });
+
+            while (! thread.isInterrupted()) {
+                try { Thread.sleep(10000L); }
+                catch (final InterruptedException exception) { break; }
+
+                final String message;
+                {
+                    final Long nonce = (long) (Math.random() * Integer.MAX_VALUE);
+                    final Json pingMessage = new Json(false);
+                    pingMessage.put("ping", nonce);
+                    message = pingMessage.toString();
+                }
+
+                READ_LOCK.lock();
+                try {
+                    for (final WebSocket webSocket : WEB_SOCKETS.values()) {
+                        webSocket.sendMessage(message);
+                    }
+                }
+                finally {
+                    READ_LOCK.unlock();
+                }
+            }
+        }
+    });
+
     protected Json _createGlobalGameStateJson() {
         final Json markedIndexes = new Json(false);
         int index = 0;
@@ -53,6 +88,20 @@ public class WebSocketApi implements WebSocketServlet {
             index += 1;
         }
         return markedIndexes;
+    }
+
+    protected Json _createPlayersJson() {
+        final Json playersJson = new Json(true);
+        for (final String playerName : _bingoState.getPlayers()) {
+            final Boolean hasPaid = _bingoState.hasPaid(playerName);
+
+            final Json playerJson = new Json(false);
+            playerJson.put("name", playerName);
+            playerJson.put("hasPaid", hasPaid);
+
+            playersJson.add(playerJson);
+        }
+        return playersJson;
     }
 
     protected void _handleGetLabels(final Json request, final WebSocket webSocket) {
@@ -72,6 +121,99 @@ public class WebSocketApi implements WebSocketServlet {
         _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
+    protected void _handleGetPlayers(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetPlayers " + webSocket.getId() + " " + request);
+        final Integer requestId = request.getInteger("requestId");
+
+        final Json playersJson;
+        READ_LOCK.lock();
+        try {
+            playersJson = _createPlayersJson();
+        }
+        finally {
+            READ_LOCK.unlock();
+        }
+
+        final Json responseJson = new Json();
+        responseJson.put("requestId", requestId);
+        responseJson.put("wasSuccess", 1);
+        responseJson.put("players", playersJson);
+
+        _webSocketSendMessage(webSocket, responseJson.toString());
+    }
+
+    protected void _handleGetWinners(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetWinners " + webSocket.getId() + " " + request);
+        final Integer requestId = request.getInteger("requestId");
+
+        final Json winnersJson;
+        READ_LOCK.lock();
+        try {
+            final List<String> winners = _bingoState.getWinningBingoUsers();
+
+            winnersJson = new Json(true);
+            for (final String winner : winners) {
+                winnersJson.add(winner);
+            }
+        }
+        finally {
+            READ_LOCK.unlock();
+        }
+
+        final Json responseJson = new Json();
+        responseJson.put("requestId", requestId);
+        responseJson.put("wasSuccess", 1);
+        responseJson.put("winners", winnersJson);
+
+        _webSocketSendMessage(webSocket, responseJson.toString());
+    }
+
+    protected void _handleGetJackpot(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetJackpot " + webSocket.getId() + " " + request);
+
+        final Integer requestId = request.getInteger("requestId");
+
+        final Long jackpot;
+
+        READ_LOCK.lock();
+        try {
+            jackpot = _bingoState.getJackpot();
+        }
+        finally {
+            READ_LOCK.unlock();
+        }
+
+        final Json responseJson = new Json();
+        responseJson.put("requestId", requestId);
+        responseJson.put("wasSuccess", 1);
+        responseJson.put("jackpot", jackpot);
+
+        _webSocketSendMessage(webSocket, responseJson.toString());
+    }
+
+    protected void _broadcastPlayerList() {
+        READ_LOCK.lock();
+        try {
+            final String message;
+            {
+                final Json playersJson = _createPlayersJson();
+                final Json responseJson = new Json();
+                responseJson.put("wasSuccess", 1);
+                responseJson.put("players", playersJson);
+
+                message = responseJson.toString();
+            }
+
+            for (final WebSocket webSocket : ADMIN_WEB_SOCKETS.values()) {
+                if (webSocket == null) { continue; }
+                _webSocketSendMessage(webSocket, message);
+            }
+        }
+        finally {
+            READ_LOCK.unlock();
+        }
+    }
+
     protected void _handleGetGameState(final Json request, final WebSocket webSocket) {
         Logger.trace("_handleGetGameState " + webSocket.getId() + " " + request);
         final Long webSocketId = webSocket.getId();
@@ -80,16 +222,25 @@ public class WebSocketApi implements WebSocketServlet {
         final Json parameters = request.get("parameters");
         final String username = parameters.getString("username").toLowerCase();
 
+        final Long jackpot;
         final BingoGame bingoGame;
+        final boolean userWasCreated;
 
         WRITE_LOCK.lock();
         try {
             if (! _bingoState.hasBingoGame(username)) {
                 Logger.info("Creating BingoGame for: " + username);
                 _bingoState.newBingoGame(username);
+                userWasCreated = true;
             }
+            else {
+                userWasCreated = false;
+            }
+
             bingoGame = _bingoState.getBingoGame(username);
             USERNAMES.put(webSocketId, username);
+
+            jackpot = _bingoState.getJackpot();
         }
         finally {
             WRITE_LOCK.unlock();
@@ -99,6 +250,11 @@ public class WebSocketApi implements WebSocketServlet {
         responseJson.put("requestId", requestId);
         responseJson.put("wasSuccess", 1);
         responseJson.put("gameState", bingoGame);
+        responseJson.put("jackpot", jackpot);
+
+        if (userWasCreated) {
+            _broadcastPlayerList();
+        }
 
         _webSocketSendMessage(webSocket, responseJson.toString());
     }
@@ -112,12 +268,14 @@ public class WebSocketApi implements WebSocketServlet {
                 final String username = USERNAMES.get(webSocketId);
                 if (username == null) { continue; }
 
+                final Long jackpot = _bingoState.getJackpot();
                 final BingoGame bingoGame = _bingoState.getBingoGame(username);
 
                 final Json responseJson = new Json();
                 responseJson.put("requestId", null);
                 responseJson.put("wasSuccess", 1);
                 responseJson.put("gameState", bingoGame);
+                responseJson.put("jackpot", jackpot);
 
                 _webSocketSendMessage(webSocket, responseJson.toString());
             }
@@ -127,23 +285,54 @@ public class WebSocketApi implements WebSocketServlet {
         }
     }
 
-    protected void _broadcastBingoWinner() {
-        Logger.trace("_broadcastBingoWinner");
-        final String bingoWinner = BINGO_WINNER;
+    protected Json _createWinnersJson() {
+        final List<String> bingoWinners = _bingoState.getWinningBingoUsers();
+        final Json winnersJson = new Json(true);
+
+        int i = 0;
+        for (final String username : bingoWinners) {
+            final Long amount = _bingoState.getJackpot(i);
+
+            final Json playerJson = new Json(false);
+            playerJson.put("name", username);
+            playerJson.put("amount", amount);
+
+            winnersJson.add(playerJson);
+
+            i += 1;
+        }
+
+        return winnersJson;
+    }
+
+    protected void _broadcastBingoWinners() {
+        Logger.trace("_broadcastBingoWinners");
 
         READ_LOCK.lock();
         try {
+            final Json winnersJson = _createWinnersJson();
+
             for (final WebSocket webSocket : WEB_SOCKETS.values()) {
                 final Json responseJson = new Json();
-                responseJson.put("requestId", null);
                 responseJson.put("wasSuccess", 1);
-                responseJson.put("bingoWinner", bingoWinner);
+                responseJson.put("bingoWinners", winnersJson);
 
                 _webSocketSendMessage(webSocket, responseJson.toString());
             }
         }
         finally {
             READ_LOCK.unlock();
+        }
+    }
+
+    protected void _registerAdminWebSocket(final WebSocket webSocket) {
+        WRITE_LOCK.lock();
+        try {
+            final Long webSocketId = webSocket.getId();
+            ADMIN_WEB_SOCKETS.put(webSocketId, webSocket);
+        }
+        finally {
+            WRITE_LOCK.unlock();
         }
     }
 
@@ -155,6 +344,8 @@ public class WebSocketApi implements WebSocketServlet {
             _sendUnauthorizedRequest(request, webSocket);
             return;
         }
+
+        _registerAdminWebSocket(webSocket);
 
         final Integer requestId = request.getInteger("requestId");
 
@@ -185,30 +376,25 @@ public class WebSocketApi implements WebSocketServlet {
             return;
         }
 
-        final MutableList<String> winningBingoUsers = new MutableList<>();
+        _registerAdminWebSocket(webSocket);
+
+        final Integer index = parameters.getInteger("index");
+        final Boolean isMarked = parameters.getBoolean("isMarked");
+
+        final boolean hasNewBingoWinner;
+        final Json globalGameStateJson;
+
         WRITE_LOCK.lock();
         try { // Update the global game state...
-            final Integer index = parameters.getInteger("index");
-            final Boolean isMarked = parameters.getBoolean("isMarked");
-            final List<String> winners = _bingoState.markLabel(index, isMarked);
-            for (final String winner : winners) {
-                if (! BANNED_WINNERS.contains(winner)) {
-                    Logger.debug("Bingo detected for: " + winner);
-                    winningBingoUsers.add(winner);
-                }
-            }
+            final List<String> originalWinningBingoUsers = _bingoState.getWinningBingoUsers();
+            _bingoState.markLabel(index, isMarked);
+            final List<String> newWinningBingoUsers = _bingoState.getWinningBingoUsers();
+
+            globalGameStateJson = _createGlobalGameStateJson();
+            hasNewBingoWinner = (newWinningBingoUsers.getCount() > originalWinningBingoUsers.getCount());
         }
         finally {
             WRITE_LOCK.unlock();
-        }
-
-        final Json globalGameStateJson;
-        READ_LOCK.lock();
-        try {
-            globalGameStateJson = _createGlobalGameStateJson();
-        }
-        finally {
-            READ_LOCK.unlock();
         }
 
         final Json responseJson = new Json();
@@ -220,61 +406,68 @@ public class WebSocketApi implements WebSocketServlet {
 
         _broadcastGameState();
 
-        if ( (BINGO_WINNER == null) && (! winningBingoUsers.isEmpty()) ) {
-            final int index = (((int) (Math.random() * Integer.MAX_VALUE)) % winningBingoUsers.getCount());
-            BINGO_WINNER = winningBingoUsers.get(index);
-            Logger.info("Bingo selected: " + BINGO_WINNER);
+        if (hasNewBingoWinner) {
+            if (Logger.isInfoEnabled()) {
+                READ_LOCK.lock();
+                try {
+                    final List<String> bingoWinners = _bingoState.getWinningBingoUsers();
+                    final String[] bingoWinnersArray = new String[bingoWinners.getCount()];
+                    for (int i = 0; i < bingoWinnersArray.length; ++i) {
+                        bingoWinnersArray[i] = bingoWinners.get(i);
+                    }
 
-            _broadcastBingoWinner();
-        }
-        else if (winningBingoUsers.isEmpty()) {
-            BINGO_WINNER = null;
+                    Logger.info("Bingo Winners: " + Util.join(", ", bingoWinnersArray));
+                }
+                finally {
+                    READ_LOCK.unlock();
+                }
+            }
+
+            _broadcastBingoWinners();
         }
     }
 
-    protected synchronized void _handleBanWinner(final Json request, final WebSocket webSocket) {
-        Logger.trace("_handleBanWinner " + webSocket.getId() + " " + request);
-
-        // final Integer requestId = request.getInteger("requestId");
+    protected synchronized void _handleSetHasPaid(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleSetHasPaid " + webSocket.getId() + " " + request);
+        final Integer requestId = request.getInteger("requestId");
         final Json parameters = request.get("parameters");
-        final String bingoWinner = parameters.getString("username");
         final String password = parameters.getString("password");
         if (! Util.areEqual(_adminPassword, password)) {
             _sendUnauthorizedRequest(request, webSocket);
             return;
         }
 
-        if (! Util.isBlank(bingoWinner)) {
-            BANNED_WINNERS.add(bingoWinner);
-        }
-        BINGO_WINNER = null;
+        _registerAdminWebSocket(webSocket);
 
-        // Check for new eligible winner...
-        final MutableList<String> winningBingoUsers = new MutableList<>();
+        WRITE_LOCK.lock();
+        try { // Update the global game state...
+            final String username = parameters.getString("username").toLowerCase();
+            final Boolean hasPaid = parameters.getBoolean("hasPaid");
+
+            _bingoState.setHasPaid(username, hasPaid);
+            Logger.info("Set " + username + " paid=" + hasPaid);
+        }
+        finally {
+            WRITE_LOCK.unlock();
+        }
+
+        final Json playersJson;
         READ_LOCK.lock();
         try {
-            final List<String> winners = _bingoState.getWinningBingos();
-            for (final String winner : winners) {
-                if (! BANNED_WINNERS.contains(winner)) {
-                    Logger.debug("Bingo detected for: " + winner);
-                    winningBingoUsers.add(winner);
-                }
-            }
+            playersJson = _createPlayersJson();
         }
         finally {
             READ_LOCK.unlock();
         }
 
-        if ( (BINGO_WINNER == null) && (! winningBingoUsers.isEmpty()) ) {
-            final int index = (((int) (Math.random() * Integer.MAX_VALUE)) % winningBingoUsers.getCount());
-            BINGO_WINNER = winningBingoUsers.get(index);
-            Logger.info("Bingo selected: " + BINGO_WINNER);
-        }
-        else if (winningBingoUsers.isEmpty()) {
-            BINGO_WINNER = null;
-        }
+        _broadcastGameState();
 
-        _broadcastBingoWinner();
+        final Json responseJson = new Json();
+        responseJson.put("requestId", requestId);
+        responseJson.put("wasSuccess", 1);
+        responseJson.put("players", playersJson);
+
+        _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
     protected void _sendUnauthorizedRequest(final Json request, final WebSocket webSocket) {
@@ -290,13 +483,22 @@ public class WebSocketApi implements WebSocketServlet {
         _webSocketSendMessage(webSocket, responseJson.toString());
     }
 
-    protected void _handleGetBingoWinner(final Json request, final WebSocket webSocket) {
-        Logger.trace("_handleGetBingoWinner " + webSocket.getId() + " " + request);
+    protected void _handleGetBingoWinners(final Json request, final WebSocket webSocket) {
+        Logger.trace("_handleGetBingoWinners " + webSocket.getId() + " " + request);
+
+        final Json winnersJson;
+        READ_LOCK.lock();
+        try {
+            winnersJson = _createWinnersJson();
+        }
+        finally {
+            READ_LOCK.unlock();
+        }
 
         final Json responseJson = new Json();
         responseJson.put("requestId", null);
         responseJson.put("wasSuccess", 1);
-        responseJson.put("bingoWinner", BINGO_WINNER);
+        responseJson.put("bingoWinners", winnersJson);
 
         _webSocketSendMessage(webSocket, responseJson.toString());
     }
@@ -307,6 +509,18 @@ public class WebSocketApi implements WebSocketServlet {
         switch (query) {
             case "getLabels": {
                 _handleGetLabels(request, webSocket);
+            } break;
+
+            case "getJackpot": {
+                _handleGetJackpot(request, webSocket);
+            } break;
+
+            case "getPlayers": {
+                _handleGetPlayers(request, webSocket);
+            } break;
+
+            case "getWinners": {
+                _handleGetWinners(request, webSocket);
             } break;
 
             case "getGameState": {
@@ -321,12 +535,12 @@ public class WebSocketApi implements WebSocketServlet {
                 _handleUpdateGlobalGameState(request, webSocket);
             } break;
 
-            case "getBingoWinner": {
-                _handleGetBingoWinner(request, webSocket);
+            case "setHasPaid": {
+                _handleSetHasPaid(request, webSocket);
             } break;
 
-            case "banWinner": {
-                _handleBanWinner(request, webSocket);
+            case "getBingoWinners": {
+                _handleGetBingoWinners(request, webSocket);
             } break;
 
             default: {
@@ -406,12 +620,14 @@ public class WebSocketApi implements WebSocketServlet {
 
     public void start() {
         _threadPool.start();
+        _pingThread.start();
     }
 
     public void stop() {
         _isShuttingDown = true;
 
         _threadPool.stop();
+        _pingThread.interrupt();
 
         WRITE_LOCK.lock();
         try {

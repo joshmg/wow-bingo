@@ -12,13 +12,22 @@ import com.softwareverde.util.Util;
 public class Main {
     public static void main(final String[] parameters) {
         Logger.setLog(LineNumberAnnotatedLog.getInstance());
-        Logger.setLogLevel(LogLevel.ON);
+        Logger.setLogLevel(LogLevel.DEBUG);
 
         final String adminPassword = (parameters.length > 0 ? parameters[0] : "");
-        final Long seed;
+        final Integer ticketCost;
         {
             if (parameters.length > 1) {
-                seed = Util.parseLong(parameters[1]);
+                ticketCost = Util.parseInt(parameters[1]);
+            }
+            else {
+                ticketCost = 5;
+            }
+        }
+        final Long seed;
+        {
+            if (parameters.length > 2) {
+                seed = Util.parseLong(parameters[2]);
             }
             else {
                 seed = Math.abs((long) (Integer.MAX_VALUE * Math.random()));
@@ -39,10 +48,11 @@ public class Main {
         if (! Util.isBlank(adminPassword)) {
             Logger.info("[Password protected]");
         }
+        Logger.info("[Ticket Cost " + ticketCost + "]");
         Logger.info("[Seed " + seed + "]");
         Logger.info("[Loaded " + bingoSquares.getCount() + " squares]");
 
-        final BingoServer bingoServer = new BingoServer(bingoSquares, seed, adminPassword);
+        final BingoServer bingoServer = new BingoServer(bingoSquares, ticketCost, seed, adminPassword);
         bingoServer.start();
 
         Logger.info("[Listening on port 8080]");
