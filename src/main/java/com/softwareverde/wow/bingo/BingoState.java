@@ -3,6 +3,7 @@ package com.softwareverde.wow.bingo;
 import com.softwareverde.constable.list.List;
 import com.softwareverde.constable.list.immutable.ImmutableList;
 import com.softwareverde.constable.list.mutable.MutableList;
+import com.softwareverde.util.Util;
 
 import java.util.HashMap;
 
@@ -68,7 +69,7 @@ public class BingoState {
 
             if (newBingoCount > previousBingoCount) {
                 final String playerName = _getPlayer(bingoGame);
-                if (playerName != null) {
+                if ( (playerName != null) && Util.coalesce(_playersPaid.get(playerName)) ) {
                     _playersWon.add(playerName);
                 }
             }
